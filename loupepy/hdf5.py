@@ -13,10 +13,7 @@ import anndata
 from scipy.sparse import csc_matrix
 
 
-def create_hdf5(
-        adata,
-        outfile="out.h5"
-):
+def create_hdf5(adata, outfile="out.h5"):
     with h5py.File(outfile, "w") as out:
         matrix_to_h5(out, adata)
         clusters_to_h5(out, adata)
@@ -46,16 +43,18 @@ def matrix_to_h5(h5_obj, adata):
     features_group.create_dataset("feature_type", data=adata.var.feature_type.values)
     features_group.create_dataset("_all_tag_keys", data=np.empty())
 
+
 def validate_barcodes(barcodes):
     bc_pattern = re.compile("^([ACTG]{6,})(-.*?)?$")
     return all([bc_pattern.match(bc) for bc in barcodes])
-    
+
+
 def format_barcodes(adata):
     barcodes = adata.obs_names
     if validate_barcodes(barcodes):
         return barcodes.to_numpy()
 
-    bc_pattern = re.compile("^(.*?)(_|-|:)?([ACTG]{6,})(-[0-9]+)?(_|-|:)?(.*?)$") 
+    bc_pattern = re.compile("^(.*?)(_|-|:)?([ACTG]{6,})(-[0-9]+)?(_|-|:)?(.*?)$")
     expanded = barcodes.str.extractall(bc_pattern).fillna("")
     expanded.columns = ["prefix", "sep1", "barcode", "dashnum", "sep2", "suffix"]
     if expanded.prefix.any():
@@ -66,7 +65,7 @@ def format_barcodes(adata):
     formated = expanded.barcode + expanded.dashnum + expanded.prefix + expanded.suffix
     if len(formated) != len(barcodes):
         return barcodes.to_numpy()
-    
+
     return formated.to_numpy()
 
 
@@ -89,23 +88,25 @@ def clusters_to_h5(h5_obj, adata):
         group.create_datasets(group, "score", data=0.0)
         group.create_datasets(group, "clustering_type", data="unknown")
 
+
 def projections_to_h5(h5_obj, adata):
     projections_group = h5_obj.create_group("projections")
     for proj_name in adata.obsm_keys():
         proj = adata.obsm[proj_name]
         is_umap = "umap" in proj_name
         is_tsne = ("tsne" in proj_name) or ("t-sne" in proj_name)
-        
+
         method = proj_name
         if is_umap:
             method = "UMAP"
         if is_tsne:
             method = "t-SNE"
-        
+
         group = projections_group.create_group("proj_name")
         group.create_dataset_like("name", data=proj_name)
         group.create_dataset_like("method", data=method)
         group.create_dataset_like("data", data=proj)
+
 
 def metadata_to_h5(h5_obj, adata):
     info = sys.version_info()
@@ -122,10 +123,11 @@ def metadata_to_h5(h5_obj, adata):
             "loupepy_anndata_vesion": anndata.__version__,
             "loupepy_hdf5_version": h5py.version.hdf5_version,
             "loupepy_h5py_version": h5py.version.verse,
-        }
+        },
     }
 
     dict_to_h5(h5_obj, metadata, "metadata")
+
 
 def dict_to_h5(parent, data, groupname):
     group = parent.create_group(groupname)
@@ -135,4 +137,3 @@ def dict_to_h5(parent, data, groupname):
             dict_to_h5(group, val, key)
         else:
             group.create_dataset(key, data=val)
-
