@@ -8,22 +8,40 @@ from .executable import find_executable, setup_executable
 
 
 def create_loupe_from_anndata(
-    adata, output_dir=None, output_name=None, executable_path=None, overwrite=False
+    adata,
+    output_dir=None,
+    output_name=None,
+    h5file=None,
+    executable_path=None,
+    overwrite=False,
 ):
     executable_path = setup_executable(executable_path)
     if not isinstance(adata, AnnData):
         raise Exception("Input object is not an AnnData object")
 
-    h5file = Path(mkstemp[1])
-    create_hdf5(adata, h5file)
-    create_loupe(
-        h5file,
-        output_dir=output_dir,
-        output_name=output_name,
-        executable_path=executable_path,
-        force=overwrite,
-    )
-    h5file.unlink()
+    istemp = False
+    if not h5file:
+        h5file = Path(mkstemp()[1])
+        istemp = True
+    elif not h5file.exists():
+        h5file.touch()
+
+    try:
+        create_hdf5(adata, h5file)
+        create_loupe(
+            h5file,
+            output_dir=output_dir,
+            output_name=output_name,
+            executable_path=executable_path,
+            force=overwrite,
+        )
+
+    except Exception as e:
+        raise e
+
+    finally:
+        if istemp:
+            h5file.unlink()
 
 
 def create_loupe(
@@ -48,7 +66,8 @@ def create_loupe(
     args = [
         "create",
         f"--input={h5path}",
-        f"--output={loupe_path}" "--force" if force else "",
+        f"--output={loupe_path}",
+        "--force" if force else "",
     ]
 
     if not executable_path:
@@ -62,6 +81,8 @@ def create_loupe(
 
     print(f"Running command: {executable_path} {' '.join(args)}")
 
-    res = run([str(executable_path)] + args, shell=True)
+    res = run([str(executable_path)] + args, capture_output=True)
     if res.returncode > 0:
+        print(res.stdout.decode("ascii"))
+        print(res.stderr.decode("ascii"))
         raise Exception(f"Louper executable failed: status code {res.returncode}")
