@@ -15,6 +15,8 @@ from scipy.sparse import csc_matrix
 from pandas.api.types import is_numeric_dtype
 from pathlib import Path
 
+from .barcodes import VALID_BARCODES
+
 
 def create_hdf5(adata: AnnData, outfile: Path | str = Path("out.h5")) -> None:
     with h5py.File(outfile, "w") as out:
@@ -27,7 +29,8 @@ def create_hdf5(adata: AnnData, outfile: Path | str = Path("out.h5")) -> None:
 def matrix_to_h5(h5_obj: h5py.File, adata: AnnData) -> None:
     n_bcs, n_vars = adata.shape
     barcodes_unmodified = adata.obs_names.to_numpy()
-    barcodes_formatted = format_barcodes(adata)
+    #barcodes_formatted = format_barcodes(adata)
+    barcodes_formatted = swap_barcodes(adata)
 
     sparse_mat = csc_matrix(adata.X.T)
 
@@ -59,8 +62,20 @@ def matrix_to_h5(h5_obj: h5py.File, adata: AnnData) -> None:
     create_string_dataset(features_group, "_all_tag_keys", [])
 
 
+def swap_barcodes(adata: AnnData) -> np.ndarray:
+    """
+    """
+    n_obs = adata.shape[0]
+    n_valid_barcodes = len(VALID_BARCODES)
+    copy_number = max(n_obs // n_valid_barcodes, 1)
+    valid_prefixes = np.repeat(VALID_BARCODES, copy_number)
+    valid_suffixes = np.tile(np.arange(1, copy_number+1, dtype=int), n_valid_barcodes)
+    valid_fakes =  pd.Index(valid_prefixes) + "-" + pd.Index(valid_suffixes).astype(str)
+    return valid_fakes.to_numpy()[:n_obs]
+
+
 def validate_barcodes(barcodes: np.ndarray | pd.Index | list[str]):
-    bc_pattern = re.compile("^([ACTG]{6,})(-.*?)?$")
+    bc_pattern = re.compile("^([ACTG]{6,})(-[0-9]+?)?$")
     return all([bc_pattern.match(bc) for bc in barcodes])
 
 
@@ -215,11 +230,12 @@ def teardown_h5(h5path: Path | str):
         print(h5["/matrix/features/name"][:5])
         print(h5["/matrix/features/feature_type"][:5])
         print(h5["/matrix/features/_all_tag_keys"])
-        print(h5["/matrix/barcodes"])
-        print(h5["/matrix/barcodes_unmodified"])
+        print(h5["/matrix/barcodes"][:5])
+        print(h5["/matrix/barcodes_unmodified"][:5])
         print(h5["/projections"].keys())
-        print(h5["/projections/umap"].keys())
-        print(h5["/projections/umap/data"][:5])
+        for key in h5["/projections"].keys():
+            print(h5[f"/projections/{key}"].keys())
+            print(h5[f"/projections/{key}/data"][:5])
         print(h5["/clusters"].keys())
         for key in h5["/clusters"].keys():
             print(h5[f"/clusters/{key}/assignments"][:5])
